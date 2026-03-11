@@ -12,7 +12,12 @@ import { RegisteredGroup } from './types.js';
 
 export interface IpcDeps {
   sendMessage: (jid: string, text: string) => Promise<void>;
-  sendFile: (jid: string, sourceGroup: string, relativePath: string, fileName: string) => Promise<void>;
+  sendFile: (
+    jid: string,
+    sourceGroup: string,
+    relativePath: string,
+    fileName: string,
+  ) => Promise<void>;
   registeredGroups: () => Record<string, RegisteredGroup>;
   registerGroup: (jid: string, group: RegisteredGroup) => void;
   syncGroups: (force: boolean) => Promise<void>;
@@ -92,15 +97,29 @@ export function startIpcWatcher(deps: IpcDeps): void {
                     'Unauthorized IPC message attempt blocked',
                   );
                 }
-              } else if (data.type === 'send_file' && data.chatJid && data.relativePath && data.fileName) {
+              } else if (
+                data.type === 'send_file' &&
+                data.chatJid &&
+                data.relativePath &&
+                data.fileName
+              ) {
                 const targetGroup = registeredGroups[data.chatJid];
                 if (
                   isMain ||
                   (targetGroup && targetGroup.folder === sourceGroup)
                 ) {
-                  await deps.sendFile(data.chatJid, sourceGroup, data.relativePath, data.fileName);
+                  await deps.sendFile(
+                    data.chatJid,
+                    sourceGroup,
+                    data.relativePath,
+                    data.fileName,
+                  );
                   logger.info(
-                    { chatJid: data.chatJid, fileName: data.fileName, sourceGroup },
+                    {
+                      chatJid: data.chatJid,
+                      fileName: data.fileName,
+                      sourceGroup,
+                    },
                     'IPC file sent',
                   );
                 } else {
