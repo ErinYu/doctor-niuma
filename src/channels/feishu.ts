@@ -124,7 +124,23 @@ export class FeishuChannel implements Channel {
     } else if (msg.message_type === 'audio') {
       content = '[Audio]';
     } else if (msg.message_type === 'file') {
-      content = '[File]';
+      // Download file and provide path to agent
+      try {
+        const fileData = JSON.parse(msg.content) as { file_key?: string };
+        const fileKey = fileData.file_key;
+        if (fileKey) {
+          const filePath = await this.downloadFile(fileKey, chatJid);
+          if (filePath) {
+            content = `[File: ${filePath}]`;
+          } else {
+            content = '[File]';
+          }
+        } else {
+          content = '[File]';
+        }
+      } catch {
+        content = '[File]';
+      }
     } else if (msg.message_type === 'video') {
       content = '[Video]';
     }
@@ -226,6 +242,76 @@ export class FeishuChannel implements Channel {
     } catch (err) {
       logger.error({ jid, fileName, err }, 'Feishu: failed to send file');
     }
+  }
+
+  async downloadFile(fileKey: string, chatJid: string): Promise<string | null> {
+    try {
+      // Get file info first
+      const fileInfo = await this.client.im.file.get({
+        path: { file_key: fileKey },
+      });
+
+      const fileName = (fileInfo as { data?: { file?: { name?: string } } }).data?.file?.name || `file_${Date.now()}`;
+
+      // Get group folder path
+      const group = this.opts.registeredGroups()[chatJid];
+      if (!group) {
+        logger.warn({ chatJid }, 'Cannot download file: group not registered');
+        return null;
+      }
+
+      // Create uploads directory
+      const uploadsDir = `/workspace/group/${group.folder}/uploads`;
+      fs.mkdirSync(uploadsDir, { recursive: true });
+
+      // Download file
+      const filePath = `${uploadsDir}/${fileName}`;
+
+      // Use Feishu API to download file content
+      const response = await fetch(
+        `https://open.larksuite.com/open-apis/im/v1/files/${fileKey}/download`,
+        {
+          headers: {
+            'Authorization': `Bearer ${await this.getTenantToken()}`,
+          },
+        }
+      );
+
+      if (!response.ok) {
+        logger.warn({ fileKey, status: response.status }, 'Failed to download file from Feishu');
+        return null;
+      }
+
+      const arrayBuffer = await response.arrayBuffer();
+      const buffer = Buffer.from(arrayBuffer);
+      fs.writeFileSync(filePath, buffer);
+
+      logger.info({ fileKey, filePath, fileName }, 'Feishu file downloaded');
+      return filePath;
+    } catch (err) {
+      logger.error({ fileKey, err }, 'Feishu: failed to download file');
+      return null;
+    }
+  }
+
+  private async getTenantToken(): Promise<string> {
+    // Get tenant access token using app credentials
+    const response = await fetch(
+      'https://open.larksuite.com/open-apis/auth/v3/tenant_access_token/internal',
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          app_id: this.opts.appId,
+          app_secret: this.opts.appSecret,
+        }),
+      }
+    );
+
+    const data = (await response.json()) as { tenant_access_token?: string };
+    return data.tenant_access_token || '';
   }
 
   async sendCard(jid: string, card: CardContent): Promise<void> {
