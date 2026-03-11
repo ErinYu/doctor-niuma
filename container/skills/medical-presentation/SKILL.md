@@ -1,6 +1,6 @@
 ---
 name: medical-presentation
-description: 医学 PPT 制作助手。支持纯文字输入和文件附件，制作教学培训、病例讨论、开题答辩、科室业务学习等医学幻灯片，并输出可编辑的 .pptx 文件。
+description: 医学 PPT 制作助手。支持纯文字输入和文件附件（PDF/Excel/图片），自动检索 PubMed 文献，制作教学培训、病例讨论、开题答辩、科室业务学习等医学幻灯片，并自动发送可编辑的 .pptx 文件到用户。
 allowed-tools: Bash,Read,Write,WebSearch,WebFetch
 ---
 
@@ -108,22 +108,55 @@ allowed-tools: Bash,Read,Write,WebSearch,WebFetch
 
 ---
 
-## 第二步：内容研究
+## 第二步：内容研究（增强版）
 
 根据 `reference_constraints` 和 `topic` 进行内容收集：
 
-**有指定文献/指南时**：
-- 优先阅读附件文件（使用 Read 工具读取用户上传的 PDF/文档路径）
-- 结合 WebSearch 补充最新数据
+### 文献检索（PubMed MCP）
 
-**纯文字请求时**：
+**学术报告/开题答辩/结题答辩类**：
+- 优先使用 `pubmed_search` MCP 工具搜索：`"[topic]" AND ("guideline"[Filter] OR "review"[Filter] OR "systematic review"[Filter])`
+- 时间过滤：近 3-5 年（`"2020"[PDAT]: "2026"[PDAT]`）
+- 优先获取：指南（guideline）、系统综述（systematic review）、meta分析
+- 提取关键数据：发病率、诊断标准、治疗推荐、预后数据
+- 搜索结果标注 PMID、年份、期刊
+
+**临床教学/病例讨论类**：
+- 使用 `pubmed_search` 搜索：`"[topic]" AND ("clinical practice guideline"[Filter] OR "case reports"[Filter])`
+- 结合 WebSearch 补充最新国内指南（如 `"中国 [topic] 指南 2023"`）
+
+### 文件附件处理
+
+**PDF 文件**（指南、论文、出院小结）：
+- 使用 Bash 工具调用：`python3 /app/pdf_reader.py <path_to_pdf>`
+- 提取全文内容，重点关注：
+  - 推荐/推荐等级、治疗路径、诊断标准
+  - 流行病学数据、预后指标
+  - 病例信息（需脱敏）
+
+**Excel 文件**（临床研究数据）：
+- 使用 Bash 工具调用：`python3 /app/excel_reader.py <path_to_excel>`
+- 提取：表头、数据行数、统计类型、关键列
+- 识别：P值、置信区间、统计方法
+
+**图片文件**（化验单、CT报告截图）：
+- 使用 Bash 工具调用：`tesseract <path_to_image> stdout -l chi_sim+eng`
+- ⚠️ **高风险**：OCR 可能出错，数字识别需人工核对
+- 适用于：化验单数值、CT报告文字
+
+### 纯文字请求（降级方案）
+
+当 PubMed 不可用或检索失败时：
 - 使用 WebSearch 搜索：`"[topic]" 指南 最新 [year]`、`"[topic]" clinical guideline [year]`
 - 重点获取：流行病学数据、诊断标准、治疗方案、预后数据
-- 学术报告类：搜索 PubMed 相关 review，关注近 3 年进展
 
-**病例讨论类**：
-- 从附件中提取：主诉、现病史、检验检查、诊断过程、治疗方案、转归
-- 脱敏处理：去除姓名、身份证号、联系方式
+### 病例讨论类
+
+从附件中提取：主诉、现病史、检验检查、诊断过程、治疗方案、转归
+
+**脱敏处理**：
+- 姓名替换为「患者X」「XX岁」
+- 去除身份证号、联系方式、住院号等 PHI
 
 ---
 
