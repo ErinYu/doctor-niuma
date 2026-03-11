@@ -27,7 +27,6 @@ RUN apt-get update && apt-get install -y \
     python3.11-venv \
     poppler-utils \
     tesseract-ocr \
-    tesseract-ocr-chi-sim \
     && rm -rf /var/lib/apt/lists/*
 
 # Set Chromium path for agent-browser
@@ -82,8 +81,13 @@ RUN mkdir -p /home/node/bin \
         openpyxl \
         pytesseract \
     && pip install --no-cache-dir -r /app/mcp-servers/pubmed-mcp/requirements.txt \
-    && ln -sf /home/node/.venv/bin/python /home/node/bin/python \
-    && ln -sf /home/node/.venv/bin/pip /home/node/bin/pip
+    && ln -sf /home/node/.venv/bin/pip /home/node/bin/pip \
+    && ln -sf /home/node/.venv/bin/pip /home/node/bin/pip3
+
+# Create wrapper scripts that use venv python
+RUN printf '#!/bin/bash\nexec /home/node/.venv/bin/python "$@"' > /home/node/bin/python \
+    && printf '#!/bin/bash\nexec /home/node/.venv/bin/python "$@"' > /home/node/bin/python3 \
+    && chmod +x /home/node/bin/python /home/node/bin/python3
 
 # Add /home/node/bin to PATH for all users
 ENV PATH="/home/node/bin:${PATH}"
