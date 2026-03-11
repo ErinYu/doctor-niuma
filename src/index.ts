@@ -37,7 +37,7 @@ import {
   storeChatMetadata,
   storeMessage,
 } from './db.js';
-import { GroupQueue } from './group-queue.js';
+import { GroupQueue, GroupStatus } from './group-queue.js';
 import { resolveGroupFolderPath } from './group-folder.js';
 import { startIpcWatcher } from './ipc.js';
 import { findChannel, formatMessages, formatOutbound } from './router.js';
@@ -53,6 +53,11 @@ import { logger } from './logger.js';
 
 // Re-export for backwards compatibility during refactor
 export { escapeXml, formatMessages } from './router.js';
+
+// Command patterns for queue management
+const STATUS_COMMAND = /^!(status|queue|任务状态)\s*$/i;
+const CANCEL_COMMAND = /^!(cancel|stop|取消|停止)\s*$/i;
+const HELP_COMMAND = /^!(help|帮助)\s*$/i;
 
 let lastTimestamp = '';
 let sessions: Record<string, string> = {};
@@ -135,6 +140,95 @@ export function _setRegisteredGroups(
 }
 
 /**
+ * Handle queue management commands (!status, !cancel, !help).
+ * Returns true if the message was a command (and was handled).
+ */
+async function handleQueueCommand(
+  chatJid: string,
+  message: NewMessage,
+  channel: Channel,
+  group: RegisteredGroup,
+): Promise<boolean> {
+  const content = message.content.trim();
+
+  // !status - show queue status
+  if (STATUS_COMMAND.test(content)) {
+    const status = queue.getStatus(chatJid);
+    const stats = queue.getQueueStats();
+    const statusText = formatStatusMessage(status, stats, group.name);
+    await channel.sendMessage(chatJid, statusText);
+    return true;
+  }
+
+  // !cancel - cancel current task
+  if (CANCEL_COMMAND.test(content)) {
+    const cancelled = queue.cancel(chatJid);
+    if (cancelled) {
+      await channel.sendMessage(chatJid, '✅ 已取消当前任务');
+    } else {
+      await channel.sendMessage(chatJid, 'ℹ️ 没有正在运行的任务');
+    }
+    return true;
+  }
+
+  // !help - show available commands
+  if (HELP_COMMAND.test(content)) {
+    const helpText = `📋 可用命令:
+!status - 查看任务队列状态
+!cancel - 取消当前正在执行的任务
+!help - 显示此帮助信息`;
+    await channel.sendMessage(chatJid, helpText);
+    return true;
+  }
+
+  return false;
+}
+
+/**
+ * Format queue status as human-readable message.
+ */
+function formatStatusMessage(
+  status: GroupStatus,
+  stats: { activeCount: number; maxConcurrent: number; waitingGroups: number },
+  groupName: string,
+): string {
+  const lines: string[] = [`📊 **${groupName}** 任务状态`];
+
+  if (status.isActive) {
+    const elapsed = status.runningSince
+      ? Math.round((Date.now() - status.runningSince) / 1000)
+      : 0;
+    const minutes = Math.floor(elapsed / 60);
+    const seconds = elapsed % 60;
+    const timeStr =
+      minutes > 0 ? `${minutes}分${seconds}秒` : `${seconds}秒`;
+
+    lines.push(`🔄 状态: ${status.isIdle ? '空闲等待中' : '处理中'} (${timeStr})`);
+    if (status.retryCount > 0) {
+      lines.push(`⚠️ 重试次数: ${status.retryCount}/5`);
+    }
+  } else {
+    lines.push(`✅ 状态: 空闲`);
+  }
+
+  if (status.pendingMessages) {
+    lines.push(`📨 待处理消息: 有`);
+  }
+
+  if (status.pendingTasksCount > 0) {
+    lines.push(`📋 队列中任务: ${status.pendingTasksCount}`);
+  }
+
+  lines.push(`\n📈 全局: ${stats.activeCount}/${stats.maxConcurrent} 容器运行中`);
+
+  if (stats.waitingGroups > 0) {
+    lines.push(`⏳ 等待中的群组: ${stats.waitingGroups}`);
+  }
+
+  return lines.join('\n');
+}
+
+/**
  * Process all pending messages for a group.
  * Called by the GroupQueue when it's this group's turn.
  */
@@ -158,6 +252,21 @@ async function processGroupMessages(chatJid: string): Promise<boolean> {
   );
 
   if (missedMessages.length === 0) return true;
+
+  // Check for queue management commands first (these bypass trigger requirements)
+  const lastMessage = missedMessages[missedMessages.length - 1];
+  const isCommand = await handleQueueCommand(
+    chatJid,
+    lastMessage,
+    channel,
+    group,
+  );
+  if (isCommand) {
+    // Command was handled, advance cursor and return
+    lastAgentTimestamp[chatJid] = lastMessage.timestamp;
+    saveState();
+    return true;
+  }
 
   // For non-main groups, check if trigger is required and present
   if (!isMainGroup && group.requiresTrigger !== false) {
@@ -426,7 +535,21 @@ async function startMessageLoop(): Promise<void> {
               );
           } else {
             // No active container — enqueue for a new one
-            queue.enqueueMessageCheck(chatJid);
+            const result = queue.enqueueMessageCheck(chatJid);
+            // Notify user if busy
+            if (result === 'queued_busy' || result === 'queued_limit') {
+              const status = queue.getStatus(chatJid);
+              const elapsed = status.runningSince
+                ? Math.round((Date.now() - status.runningSince) / 1000)
+                : 0;
+              const minutes = Math.floor(elapsed / 60);
+              const timeStr = minutes > 0 ? `${minutes}分钟` : `${elapsed}秒`;
+              const busyMsg =
+                result === 'queued_busy'
+                  ? `⏳ 正在处理上一个请求 (${timeStr})，请稍候...\n💡 发送 !status 查看状态，!cancel 取消任务`
+                  : `⏳ 系统繁忙，已加入队列 (全局 ${queue.getQueueStats().activeCount}/${queue.getQueueStats().maxConcurrent} 容器运行中)`;
+              await channel.sendMessage(chatJid, busyMsg);
+            }
           }
         }
       }
@@ -592,6 +715,23 @@ async function main(): Promise<void> {
       }
 
       await channel.sendFile(jid, hostFilePath, fileName);
+    },
+    sendCard: async (jid, card) => {
+      const channel = findChannel(channels, jid);
+      if (!channel) throw new Error(`No channel for JID: ${jid}`);
+
+      if (!channel.sendCard) {
+        // Fallback: send card as text if channel doesn't support cards
+        logger.warn(
+          { jid, channel: channel.name },
+          'Channel does not support card sending, sending text fallback',
+        );
+        const text = card.header?.title?.content || 'Card';
+        await channel.sendMessage(jid, `[卡片消息] ${text}`);
+        return;
+      }
+
+      await channel.sendCard(jid, card);
     },
     registeredGroups: () => registeredGroups,
     registerGroup,

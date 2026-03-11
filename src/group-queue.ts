@@ -25,6 +25,17 @@ interface GroupState {
   containerName: string | null;
   groupFolder: string | null;
   retryCount: number;
+  startTime: number | null; // When the current task started
+}
+
+export interface GroupStatus {
+  isActive: boolean;
+  isIdle: boolean;
+  runningSince: number | null;
+  pendingMessages: boolean;
+  pendingTasksCount: number;
+  retryCount: number;
+  containerName: string | null;
 }
 
 export class GroupQueue {
@@ -49,6 +60,7 @@ export class GroupQueue {
         containerName: null,
         groupFolder: null,
         retryCount: 0,
+        startTime: null,
       };
       this.groups.set(groupJid, state);
     }
@@ -59,15 +71,94 @@ export class GroupQueue {
     this.processMessagesFn = fn;
   }
 
-  enqueueMessageCheck(groupJid: string): void {
-    if (this.shuttingDown) return;
+  /**
+   * Check if a group has an active container running.
+   */
+  isBusy(groupJid: string): boolean {
+    return this.getGroup(groupJid).active;
+  }
+
+  /**
+   * Get detailed status for a group.
+   */
+  getStatus(groupJid: string): GroupStatus {
+    const state = this.getGroup(groupJid);
+    return {
+      isActive: state.active,
+      isIdle: state.idleWaiting,
+      runningSince: state.startTime,
+      pendingMessages: state.pendingMessages,
+      pendingTasksCount: state.pendingTasks.length,
+      retryCount: state.retryCount,
+      containerName: state.containerName,
+    };
+  }
+
+  /**
+   * Get overall queue status.
+   */
+  getQueueStats(): {
+    activeCount: number;
+    maxConcurrent: number;
+    waitingGroups: number;
+  } {
+    return {
+      activeCount: this.activeCount,
+      maxConcurrent: MAX_CONCURRENT_CONTAINERS,
+      waitingGroups: this.waitingGroups.length,
+    };
+  }
+
+  /**
+   * Cancel the current container for a group.
+   * Returns true if cancelled, false if nothing was running.
+   */
+  cancel(groupJid: string): boolean {
+    const state = this.getGroup(groupJid);
+    if (!state.active || !state.process) {
+      return false;
+    }
+
+    logger.info(
+      { groupJid, containerName: state.containerName },
+      'User requested cancellation',
+    );
+
+    // Kill the container process
+    state.process.kill('SIGTERM');
+
+    // Clean up state immediately so new tasks can start
+    state.active = false;
+    state.idleWaiting = false;
+    state.process = null;
+    state.containerName = null;
+    state.startTime = null;
+    this.activeCount--;
+
+    // Don't retry cancelled tasks
+    state.retryCount = 0;
+
+    return true;
+  }
+
+  /**
+   * Enqueue a message check for a group.
+   * Returns 'started' if container started immediately,
+   * 'queued_busy' if queued due to existing container,
+   * 'queued_limit' if queued due to concurrency limit,
+   * 'shutdown' if system is shutting down.
+   */
+  enqueueMessageCheck(
+    groupJid: string,
+  ): 'started' | 'queued_busy' | 'queued_limit' | 'shutdown' {
+    if (this.shuttingDown) return 'shutdown';
 
     const state = this.getGroup(groupJid);
 
     if (state.active) {
       state.pendingMessages = true;
       logger.debug({ groupJid }, 'Container active, message queued');
-      return;
+      return 'queued_busy';
     }
 
     if (this.activeCount >= MAX_CONCURRENT_CONTAINERS) {
@@ -79,12 +170,13 @@ export class GroupQueue {
         { groupJid, activeCount: this.activeCount },
         'At concurrency limit, message queued',
       );
-      return;
+      return 'queued_limit';
     }
 
     this.runForGroup(groupJid, 'messages').catch((err) =>
       logger.error({ groupJid, err }, 'Unhandled error in runForGroup'),
     );
+    return 'started';
   }
 
   enqueueTask(groupJid: string, taskId: string, fn: () => Promise<void>): void {
@@ -202,6 +294,7 @@ export class GroupQueue {
     state.idleWaiting = false;
     state.isTaskContainer = false;
     state.pendingMessages = false;
+    state.startTime = Date.now();
     this.activeCount++;
 
     logger.debug(
@@ -226,6 +319,7 @@ export class GroupQueue {
       state.process = null;
       state.containerName = null;
       state.groupFolder = null;
+      state.startTime = null;
       this.activeCount--;
       this.drainGroup(groupJid);
     }
@@ -237,6 +331,7 @@ export class GroupQueue {
     state.idleWaiting = false;
     state.isTaskContainer = true;
     state.runningTaskId = task.id;
+    state.startTime = Date.now();
     this.activeCount++;
 
     logger.debug(
@@ -255,6 +350,7 @@ export class GroupQueue {
       state.process = null;
       state.containerName = null;
       state.groupFolder = null;
+      state.startTime = null;
       this.activeCount--;
       this.drainGroup(groupJid);
     }
