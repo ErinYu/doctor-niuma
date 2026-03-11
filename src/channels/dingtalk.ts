@@ -58,11 +58,14 @@ export class DingTalkChannel implements Channel {
   }
 
   async connect(): Promise<void> {
-    this.client.registerCallbackListener(TOPIC_ROBOT, (res: DingTalkWebSocketResponse) => {
-      this.handleInbound(res).catch((err) =>
-        logger.error({ err }, 'DingTalk: error handling inbound message'),
-      );
-    });
+    this.client.registerCallbackListener(
+      TOPIC_ROBOT,
+      (res: DingTalkWebSocketResponse) => {
+        this.handleInbound(res).catch((err) =>
+          logger.error({ err }, 'DingTalk: error handling inbound message'),
+        );
+      },
+    );
 
     await this.client.connect();
     this._connected = true;
@@ -112,15 +115,22 @@ export class DingTalkChannel implements Channel {
     const timestamp = new Date(data.createAt).toISOString();
     const senderName = data.senderNick;
     const sender = data.senderStaffId || data.senderId;
-    const chatName = isDirect
-      ? senderName
-      : (data.conversationTitle || chatJid);
+    const chatName = isDirect ? senderName : data.conversationTitle || chatJid;
 
-    this.opts.onChatMetadata(chatJid, timestamp, chatName, 'dingtalk', !isDirect);
+    this.opts.onChatMetadata(
+      chatJid,
+      timestamp,
+      chatName,
+      'dingtalk',
+      !isDirect,
+    );
 
     const group = this.opts.registeredGroups()[chatJid];
     if (!group) {
-      logger.debug({ chatJid, chatName }, 'DingTalk: message from unregistered chat');
+      logger.debug(
+        { chatJid, chatName },
+        'DingTalk: message from unregistered chat',
+      );
       return;
     }
 
@@ -134,7 +144,10 @@ export class DingTalkChannel implements Channel {
       is_from_me: false,
     });
 
-    logger.info({ chatJid, chatName, sender: senderName }, 'DingTalk message stored');
+    logger.info(
+      { chatJid, chatName, sender: senderName },
+      'DingTalk message stored',
+    );
   }
 
   async sendMessage(jid: string, text: string): Promise<void> {

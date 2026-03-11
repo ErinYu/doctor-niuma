@@ -37,11 +37,11 @@ export class WeChatChannel implements Channel {
       qrcodeTerminal.generate(qrcode, { small: true });
     });
 
-    this.bot.on('login', user => {
+    this.bot.on('login', (user) => {
       logger.info({ user: user.name() }, 'WeChat connected');
     });
 
-    this.bot.on('logout', user => {
+    this.bot.on('logout', (user) => {
       logger.info({ user: user.name() }, 'WeChat disconnected');
     });
 
@@ -50,7 +50,7 @@ export class WeChatChannel implements Channel {
 
       const contact = message.talker();
       const room = message.room();
-      
+
       const chatJid = room ? `wc:room:${room.id}` : `wc:user:${contact.id}`;
       let content = message.text();
       const timestamp = message.date().toISOString();
@@ -60,11 +60,11 @@ export class WeChatChannel implements Channel {
 
       let chatName = senderName;
       if (room) {
-        chatName = await room.topic() || chatName;
+        chatName = (await room.topic()) || chatName;
       }
 
       // Prepend trigger pattern for rooms if bot is mentioned
-      if (room && await message.mentionSelf()) {
+      if (room && (await message.mentionSelf())) {
         content = `@${ASSISTANT_NAME} ${content}`;
       }
 
@@ -84,7 +84,10 @@ export class WeChatChannel implements Channel {
 
       const group = this.opts.registeredGroups()[chatJid];
       if (!group) {
-        logger.debug({ chatJid, chatName }, 'Message from unregistered WeChat channel');
+        logger.debug(
+          { chatJid, chatName },
+          'Message from unregistered WeChat channel',
+        );
         return;
       }
 
@@ -98,7 +101,10 @@ export class WeChatChannel implements Channel {
         is_from_me: false,
       });
 
-      logger.info({ chatJid, chatName, sender: senderName }, 'WeChat message stored');
+      logger.info(
+        { chatJid, chatName, sender: senderName },
+        'WeChat message stored',
+      );
     });
 
     await this.bot.start();
@@ -141,7 +147,10 @@ export class WeChatChannel implements Channel {
 
 registerChannel('wechat', (opts: ChannelOpts) => {
   const envVars = readEnvFile(['ENABLE_WECHAT']);
-  if (process.env.ENABLE_WECHAT === 'true' || envVars.ENABLE_WECHAT === 'true') {
+  if (
+    process.env.ENABLE_WECHAT === 'true' ||
+    envVars.ENABLE_WECHAT === 'true'
+  ) {
     return new WeChatChannel(opts);
   }
   return null;

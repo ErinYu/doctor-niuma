@@ -1,3 +1,4 @@
+import fs from 'fs';
 import * as lark from '@larksuiteoapi/node-sdk';
 
 import { ASSISTANT_NAME } from '../config.js';
@@ -84,7 +85,15 @@ export class FeishuChannel implements Channel {
   private async handleInbound(data: FeishuMessageEvent): Promise<void> {
     const { sender, message: msg } = data;
 
-    logger.info({ sender_type: sender.sender_type, chat_type: msg.chat_type, chat_id: msg.chat_id, open_id: sender.sender_id?.open_id }, 'Feishu: inbound event');
+    logger.info(
+      {
+        sender_type: sender.sender_type,
+        chat_type: msg.chat_type,
+        chat_id: msg.chat_id,
+        open_id: sender.sender_id?.open_id,
+      },
+      'Feishu: inbound event',
+    );
 
     // Skip non-user messages (bots, system)
     if (sender.sender_type !== 'user') return;
@@ -165,6 +174,40 @@ export class FeishuChannel implements Channel {
       logger.info({ jid, length: text.length }, 'Feishu message sent');
     } catch (err) {
       logger.error({ jid, err }, 'Feishu: failed to send message');
+    }
+  }
+
+  async sendFile(jid: string, filePath: string, fileName: string): Promise<void> {
+    try {
+      const isDirect = jid.startsWith('fs:user:');
+      const id = jid.replace(/^fs:(user|group):/, '');
+      const receiveIdType = isDirect ? 'open_id' : 'chat_id';
+
+      // Step 1: Upload file to Feishu to get file_key
+      const fileStream = fs.createReadStream(filePath);
+      const uploadRes = await this.client.im.file.create({
+        data: {
+          file_type: 'stream',
+          file_name: fileName,
+          file: fileStream,
+        },
+      });
+      const fileKey = (uploadRes as { data?: { file_key?: string } }).data?.file_key;
+      if (!fileKey) throw new Error('Feishu file upload returned no file_key');
+
+      // Step 2: Send file message
+      await this.client.im.message.create({
+        params: { receive_id_type: receiveIdType },
+        data: {
+          receive_id: id,
+          msg_type: 'file',
+          content: JSON.stringify({ file_key: fileKey }),
+        },
+      });
+
+      logger.info({ jid, fileName }, 'Feishu file sent');
+    } catch (err) {
+      logger.error({ jid, fileName, err }, 'Feishu: failed to send file');
     }
   }
 

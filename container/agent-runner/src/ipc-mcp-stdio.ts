@@ -63,6 +63,45 @@ server.tool(
 );
 
 server.tool(
+  'send_file',
+  'Send a file to the user or group. The file must exist under /workspace/group/. Use this after generating files (PPT, PDF, images, etc.) to deliver them to the user.',
+  {
+    file_path: z.string().describe('Absolute path to the file (must be under /workspace/group/)'),
+    file_name: z.string().optional().describe('Display name for the file (defaults to basename of file_path)'),
+  },
+  async (args) => {
+    if (!args.file_path.startsWith('/workspace/group/')) {
+      return {
+        content: [{ type: 'text' as const, text: 'Error: file_path must be under /workspace/group/' }],
+        isError: true,
+      };
+    }
+    if (!fs.existsSync(args.file_path)) {
+      return {
+        content: [{ type: 'text' as const, text: `Error: file not found at ${args.file_path}` }],
+        isError: true,
+      };
+    }
+
+    const fileName = args.file_name || path.basename(args.file_path);
+    const relativePath = args.file_path.replace('/workspace/group/', '');
+
+    const data = {
+      type: 'send_file',
+      chatJid,
+      relativePath,
+      fileName,
+      groupFolder,
+      timestamp: new Date().toISOString(),
+    };
+
+    writeIpcFile(MESSAGES_DIR, data);
+
+    return { content: [{ type: 'text' as const, text: `File "${fileName}" queued for delivery.` }] };
+  },
+);
+
+server.tool(
   'schedule_task',
   `Schedule a recurring or one-time task. The task will run as a full agent with access to all tools. Returns the task ID for future reference. To modify an existing task, use update_task instead.
 

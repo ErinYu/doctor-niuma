@@ -83,6 +83,8 @@ export interface Channel {
   name: string;
   connect(): Promise<void>;
   sendMessage(jid: string, text: string): Promise<void>;
+  // Optional: send a file to the user/group. Channels that support it implement it.
+  sendFile?(jid: string, filePath: string, fileName: string): Promise<void>;
   isConnected(): boolean;
   ownsJid(jid: string): boolean;
   disconnect(): Promise<void>;

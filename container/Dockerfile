@@ -64,7 +64,8 @@ RUN chown -R node:node /workspace && chmod 777 /home/node
 USER node
 
 # Install python-pptx for the node user
-RUN python3 -m venv /home/node/.venv \
+RUN mkdir -p /home/node/bin \
+    && python3 -m venv /home/node/.venv \
     && . /home/node/.venv/bin/activate \
     && pip install --no-cache-dir python-pptx \
     && ln -sf /home/node/.venv/bin/python /home/node/bin/python \
