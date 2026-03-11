@@ -1,0 +1,21 @@
+{
+  "name": "Patient Education",
+  "description": "Simple, friendly style for patient education materials",
+  "palette": "patient",
+  "fonts": {
+    "heading": "Verdana",
+    "body": "Calibri"
+  },
+  "defaults": {
+    "background": "solid",
+    "decorations": ["accent_bar"],
+    "slide_number": false
+  },
+  "layout_weights": {
+    "title": 1,
+    "section": 0,
+    "content": 7,
+    "image_top": 3,
+    "image_left": 2
+  }
+}

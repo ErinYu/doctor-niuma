@@ -1,0 +1,22 @@
+{
+  "name": "Academic Medical",
+  "description": "Clean, professional academic style for presentations",
+  "palette": "academic",
+  "fonts": {
+    "heading": "Calibri",
+    "body": "Calibri"
+  },
+  "defaults": {
+    "background": "gradient",
+    "decorations": ["accent_bar"],
+    "slide_number": true
+  },
+  "layout_weights": {
+    "title": 1,
+    "section": 1,
+    "content": 6,
+    "two_col": 2,
+    "table": 1,
+    "chart": 1
+  }
+}
