@@ -366,24 +366,33 @@ echo '{ ...JSON... }' | python3 /app/generate_ppt.py
 
 ## 第五步：输出结果（增强版）
 
-生成 PPT 后，使用 send_card 发送结果卡片给用户：
+生成 PPT 后，**分两步发送**给用户：
 
-1. **确认文件存在**：检查 `/workspace/group/[filename].pptx` 是否存在
-2. **调用 send_file MCP 工具**：使用 `send_file({file_path: "/workspace/group/[filename].pptx", file_name: "[显示名].pptx"})`
-3. **调用 send_card 发送确认卡片**（飞书/支持卡片的渠道）：
+### 步骤 1：发送 PPT 文件
 
-使用以下卡片结构：
+使用 `send_file` MCP 工具：
+```
+send_file({
+  file_path: "/workspace/group/[filename].pptx",
+  file_name: "[显示名].pptx"
+})
+```
+
+### 步骤 2：发送结果确认卡片
+
+使用 `send_card` 发送飞书卡片（支持卡片的渠道）：
+
 ```json
 {
   "header": {
-    "title": { "content": "✅ PPT 已生成并发送！" }
+    "title": { "content": "✅ PPT 已生成！" }
   },
   "elements": [
     {
       "tag": "div",
       "text": {
         "tag": "lark_md",
-        "content": "**📁 文件**：[filename].pptx（[X] 页）\n**📋 类型**：[ppt_type]\n**🎨 风格**：[style]"
+        "content": "**📁 文件**：[filename].pptx（[X] 页）\n**📋 类型**：[ppt_type]\n**🎨 风格**：[style]\n**⏱ 时长**：[minutes] 分钟"
       }
     },
     {
@@ -393,7 +402,7 @@ echo '{ ...JSON... }' | python3 /app/generate_ppt.py
       "tag": "div",
       "text": {
         "tag": "lark_md",
-        "content": "**内容概览**（共 [X] 页）：\n| 章节 | 内容 |\n|------|------|\n| 一 | [章节1内容] |\n| 二 | [章节2内容] |\n..."
+        "content": "**内容概览**：\n| 章节 | 内容 |\n|------|------|\n| 一 | [章节1内容] |\n| 二 | [章节2内容] |"
       }
     },
     {
@@ -403,31 +412,29 @@ echo '{ ...JSON... }' | python3 /app/generate_ppt.py
       "tag": "div",
       "text": {
         "tag": "lark_md",
-        "content": "💡 **如需调整**：\n• 修改页面内容、顺序\n• 更换配色风格（academic/clinical/patient）\n• 增减页数\n• 添加讲稿备注\n\n直接告诉我，我马上重新生成！"
+        "content": "💡 **如需调整**：\n• 修改页面内容、顺序\n• 更换配色风格（academic/clinical/patient）\n• 增减页数\n• 添加讲稿备注"
       }
     }
   ]
 }
 ```
 
-**降级方案**：如果渠道不支持卡片，使用文本消息：
+**降级方案**：如果渠道不支持卡片，使用 `send_message` 发送文本：
 ```
-✅ PPT 已生成并发送！
+✅ PPT 已生成！
 
 📁 文件：[filename].pptx（[X] 页）
-📋 类型：[ppt_type]
-🎨 风格：[style]
+📋 类型：[ppt_type]  |  🎨 风格：[style]
 
-**内容概览**（共 [X] 页）：
+**内容概览**：
 | 章节 | 内容 |
 |------|------|
 | 一 | [章节1] |
-...
 
 💡 如需调整，直接告诉我！
 ```
 
-**注意**：如果 send_file 调用失败（文件过大、网络问题等），告知用户文件路径以便手动取用。
+**注意**：如果 send_file 失败，告知用户文件路径 `/workspace/group/[filename].pptx`
 
 ---
 

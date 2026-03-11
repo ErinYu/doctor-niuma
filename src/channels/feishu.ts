@@ -190,16 +190,25 @@ export class FeishuChannel implements Channel {
 
       // Step 1: Upload file to Feishu to get file_key
       const fileStream = fs.createReadStream(filePath);
-      const uploadRes = await this.client.im.file.create({
+      const uploadRes = (await this.client.im.file.create({
         data: {
           file_type: 'stream',
           file_name: fileName,
           file: fileStream,
         },
-      });
-      const fileKey = (uploadRes as { data?: { file_key?: string } }).data
-        ?.file_key;
-      if (!fileKey) throw new Error('Feishu file upload returned no file_key');
+      })) as unknown as Record<string, unknown>;
+
+      logger.debug({ uploadRes }, 'Feishu file upload response');
+
+      // Try multiple possible paths for file_key
+      const fileKey =
+        (uploadRes?.data as { file_key?: string })?.file_key ||
+        (uploadRes as { file_key?: string })?.file_key;
+
+      if (!fileKey) {
+        logger.error({ uploadRes }, 'Feishu file upload failed - no file_key');
+        throw new Error('Feishu file upload returned no file_key');
+      }
 
       // Step 2: Send file message
       await this.client.im.message.create({
