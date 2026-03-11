@@ -177,7 +177,11 @@ export class FeishuChannel implements Channel {
     }
   }
 
-  async sendFile(jid: string, filePath: string, fileName: string): Promise<void> {
+  async sendFile(
+    jid: string,
+    filePath: string,
+    fileName: string,
+  ): Promise<void> {
     try {
       const isDirect = jid.startsWith('fs:user:');
       const id = jid.replace(/^fs:(user|group):/, '');
@@ -192,7 +196,8 @@ export class FeishuChannel implements Channel {
           file: fileStream,
         },
       });
-      const fileKey = (uploadRes as { data?: { file_key?: string } }).data?.file_key;
+      const fileKey = (uploadRes as { data?: { file_key?: string } }).data
+        ?.file_key;
       if (!fileKey) throw new Error('Feishu file upload returned no file_key');
 
       // Step 2: Send file message

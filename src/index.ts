@@ -560,19 +560,34 @@ async function main(): Promise<void> {
       const hostFilePath = path.resolve(groupDir, relativePath);
 
       // Security: verify resolved path doesn't escape group directory
-      if (!hostFilePath.startsWith(groupDir + path.sep) && hostFilePath !== groupDir) {
-        logger.warn({ sourceGroup, relativePath, hostFilePath }, 'send_file path escapes group directory, blocked');
+      if (
+        !hostFilePath.startsWith(groupDir + path.sep) &&
+        hostFilePath !== groupDir
+      ) {
+        logger.warn(
+          { sourceGroup, relativePath, hostFilePath },
+          'send_file path escapes group directory, blocked',
+        );
         return;
       }
       if (!fs.existsSync(hostFilePath)) {
-        logger.warn({ hostFilePath, sourceGroup }, 'send_file: file not found on host');
+        logger.warn(
+          { hostFilePath, sourceGroup },
+          'send_file: file not found on host',
+        );
         return;
       }
 
       if (!channel.sendFile) {
         // Fallback: notify user that file sending isn't supported on this channel
-        logger.warn({ jid, channel: channel.name }, 'Channel does not support file sending, sending text fallback');
-        await channel.sendMessage(jid, `[文件: ${fileName}] 该渠道暂不支持文件发送，请在工作目录中查找文件。`);
+        logger.warn(
+          { jid, channel: channel.name },
+          'Channel does not support file sending, sending text fallback',
+        );
+        await channel.sendMessage(
+          jid,
+          `[文件: ${fileName}] 该渠道暂不支持文件发送，请在工作目录中查找文件。`,
+        );
         return;
       }
 
