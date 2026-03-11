@@ -358,6 +358,62 @@ echo '{ ...JSON... }' | python3 /app/generate_ppt.py
 - 增强的表格样式（渐变表头、斑马纹、彩色边框）
 - 更丰富的字体配对（每种风格独立字体设置）
 
+---
+
+## ⚠️ 布局多样化规则（必须遵守）
+
+**问题**：只用 `content` 布局会导致 PPT 死板、单调
+
+**强制规则**：
+
+### 1. 章节分隔（每 3-5 页必须有 section）
+```
+❌ 错误：连续 10 页 content 布局
+✅ 正确：section → content → content → content → section → ...
+```
+
+### 2. 布局多样化（每种布局至少用 1 次）
+```
+| 布局类型 | 使用场景 | 优先级 |
+|----------|----------|--------|
+| section  | 章节开始、主题切换 | 必须 |
+| two_col  | 对比（药物A vs B、手术 vs 保守） | 推荐 |
+| table    | 数据展示（指南推荐、分级标准） | 推荐 |
+| comparison | Before/After、方案对比 | 可选 |
+| quote    | 指南原文、专家观点引用 | 可选 |
+| center_focus | 核心结论、关键数据 | 可选 |
+```
+
+### 3. 内容拆分规则
+```
+❌ 一页超过 6 个要点 → 拆成两页或用 two_col
+❌ 纯文字描述数据 → 改用 table 布局
+❌ 对比内容用 content → 改用 two_col 或 comparison
+```
+
+### 4. 视觉节奏模板（15 页 PPT 示例）
+```
+1.  title — 标题页
+2.  section — 第一章：概述
+3.  content — 流行病学数据
+4.  table — 诊断标准表格
+5.  section — 第二章：发病机制
+6.  content — 病理生理
+7.  two_col — 病因 vs 危险因素
+8.  section — 第三章：临床表现
+9.  content — 主要症状
+10. comparison — 典型 vs 非典型表现
+11. section — 第四章：治疗
+12. two_col — 药物治疗 vs 非药物治疗
+13. table — 治疗方案汇总
+14. center_focus — 核心要点总结
+15. content — 参考文献
+```
+
+**注意**：避免连续 3 页以上使用相同布局！
+
+---
+
 **文件命名规则**：
 `/workspace/group/[topic_slug]_[type]_[date].pptx`
 例：`/workspace/group/copd_teaching_20260311.pptx`
