@@ -129,6 +129,30 @@ export function startIpcWatcher(deps: IpcDeps): void {
                     'Unauthorized IPC send_file attempt blocked',
                   );
                 }
+              } else if (
+                data.type === 'send_card' &&
+                data.chatJid &&
+                data.elements
+              ) {
+                const targetGroup = registeredGroups[data.chatJid];
+                if (
+                  isMain ||
+                  (targetGroup && targetGroup.folder === sourceGroup)
+                ) {
+                  await deps.sendCard(data.chatJid, {
+                    header: data.header,
+                    elements: data.elements,
+                  });
+                  logger.info(
+                    { chatJid: data.chatJid, sourceGroup },
+                    'IPC card sent',
+                  );
+                } else {
+                  logger.warn(
+                    { chatJid: data.chatJid, sourceGroup },
+                    'Unauthorized IPC send_card attempt blocked',
+                  );
+                }
               }
               fs.unlinkSync(filePath);
             } catch (err) {

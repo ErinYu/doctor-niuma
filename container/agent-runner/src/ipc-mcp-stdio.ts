@@ -102,6 +102,43 @@ server.tool(
 );
 
 server.tool(
+  'send_card',
+  'Send an interactive card to the user or group. Use this for rich formatted messages with headers, tables, and structured content. Supports Feishu/Lark card format.',
+  {
+    header: z.object({
+      title: z.object({
+        content: z.string().describe('Card title text'),
+      }).optional(),
+      subtitle: z.object({
+        content: z.string().describe('Card subtitle text'),
+      }).optional(),
+    }).optional().describe('Card header with title and optional subtitle'),
+    elements: z.array(z.object({
+      tag: z.string().describe('Element type (e.g., "div", "markdown", "hr", "img")'),
+      text: z.object({
+        tag: z.string().describe('Text format tag (e.g., "lark_md", "plain_text")'),
+        content: z.string().describe('Text content (supports markdown for lark_md)'),
+      }).optional(),
+      content: z.string().optional().describe('Direct content for markdown elements'),
+    })).describe('Card body elements'),
+  },
+  async (args) => {
+    const data = {
+      type: 'send_card',
+      chatJid,
+      header: args.header,
+      elements: args.elements,
+      groupFolder,
+      timestamp: new Date().toISOString(),
+    };
+
+    writeIpcFile(MESSAGES_DIR, data);
+
+    return { content: [{ type: 'text' as const, text: 'Card queued for delivery.' }] };
+  },
+);
+
+server.tool(
   'schedule_task',
   `Schedule a recurring or one-time task. The task will run as a full agent with access to all tools. Returns the task ID for future reference. To modify an existing task, use update_task instead.
 

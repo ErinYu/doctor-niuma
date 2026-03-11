@@ -1,4 +1,4 @@
-import { Channel, NewMessage } from './types.js';
+import { CardContent, Channel, NewMessage } from './types.js';
 
 export function escapeXml(s: string): string {
   if (!s) return '';
@@ -49,6 +49,19 @@ export function routeFileOutbound(
     throw new Error(`Channel ${channel.name} does not support file sending`);
   }
   return channel.sendFile(jid, filePath, fileName);
+}
+
+export function routeCardOutbound(
+  channels: Channel[],
+  jid: string,
+  card: CardContent,
+): Promise<void> {
+  const channel = channels.find((c) => c.ownsJid(jid) && c.isConnected());
+  if (!channel) throw new Error(`No channel for JID: ${jid}`);
+  if (!channel.sendCard) {
+    throw new Error(`Channel ${channel.name} does not support card sending`);
+  }
+  return channel.sendCard(jid, card);
 }
 
 export function findChannel(

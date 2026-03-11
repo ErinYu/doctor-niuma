@@ -74,7 +74,26 @@
 
 ---
 
-## 5. 剩余待办事项
+## 5. 飞书卡片渲染优化（✅ 已完成 2026-03-12）
+
+**问题：** 表格在飞书卡片中显示为原始 Markdown 文本而非渲染后的表格
+
+**解决方案：**
+- [x] 将 `sendMessage` 从 `msg_type: 'text'` 改为 `msg_type: 'interactive'`
+- [x] 使用 `tag: 'markdown'` 元素替代 `tag: 'div'` + `tag: 'lark_md'`
+- [x] 添加 `sendCard` MCP 工具支持
+- [x] 在 IPC 层添加 `send_card` 消息类型处理
+- [x] 在 router 层添加 `routeCardOutbound` 函数
+
+**飞书 Markdown 限制说明：**
+- 表格支持最多 10 列
+- 每张卡片最多 5 个表格
+- 只支持 H1 (`#`) 和 H2 (`##`) 标题
+- 支持：粗体、斜体、代码、链接、列表、分割线
+
+---
+
+## 6. 剩余待办事项
 
 **高级功能：**
 - [ ] 自动图片推荐/生成（AI 驱动）
