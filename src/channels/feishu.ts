@@ -163,7 +163,7 @@ export class FeishuChannel implements Channel {
       const id = jid.replace(/^fs:(user|group):/, '');
       const receiveIdType = isDirect ? 'open_id' : 'chat_id';
 
-      // Use interactive card with lark_md for markdown rendering
+      // Use interactive card with markdown tag for proper table rendering
       await this.client.im.message.create({
         params: { receive_id_type: receiveIdType },
         data: {
@@ -175,18 +175,15 @@ export class FeishuChannel implements Channel {
             },
             elements: [
               {
-                tag: 'div',
-                text: {
-                  tag: 'lark_md',
-                  content: text,
-                },
+                tag: 'markdown',
+                content: text,
               },
             ],
           }),
         },
       });
 
-      logger.info({ jid, length: text.length }, 'Feishu message sent (card)');
+      logger.info({ jid, length: text.length }, 'Feishu message sent (markdown)');
     } catch (err) {
       logger.error({ jid, err }, 'Feishu: failed to send message');
     }
@@ -204,25 +201,16 @@ export class FeishuChannel implements Channel {
 
       // Step 1: Upload file to Feishu to get file_key
       const fileStream = fs.createReadStream(filePath);
-      const uploadRes = (await this.client.im.file.create({
+      const uploadRes = await this.client.im.file.create({
         data: {
           file_type: 'stream',
           file_name: fileName,
           file: fileStream,
         },
-      })) as unknown as Record<string, unknown>;
-
-      logger.debug({ uploadRes }, 'Feishu file upload response');
-
-      // Try multiple possible paths for file_key
-      const fileKey =
-        (uploadRes?.data as { file_key?: string })?.file_key ||
-        (uploadRes as { file_key?: string })?.file_key;
-
-      if (!fileKey) {
-        logger.error({ uploadRes }, 'Feishu file upload failed - no file_key');
-        throw new Error('Feishu file upload returned no file_key');
-      }
+      });
+      const fileKey = (uploadRes as { data?: { file_key?: string } }).data
+        ?.file_key;
+      if (!fileKey) throw new Error('Feishu file upload returned no file_key');
 
       // Step 2: Send file message
       await this.client.im.message.create({

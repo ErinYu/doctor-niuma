@@ -358,105 +358,98 @@ echo '{ ...JSON... }' | python3 /app/generate_ppt.py
 - 增强的表格样式（渐变表头、斑马纹、彩色边框）
 - 更丰富的字体配对（每种风格独立字体设置）
 
+---
+
+## ⚠️ 布局多样化规则（必须遵守）
+
+**问题**：只用 `content` 布局会导致 PPT 死板、单调
+
+**强制规则**：
+
+### 1. 章节分隔（每 3-5 页必须有 section）
+```
+❌ 错误：连续 10 页 content 布局
+✅ 正确：section → content → content → content → section → ...
+```
+
+### 2. 布局多样化（每种布局至少用 1 次）
+```
+| 布局类型 | 使用场景 | 优先级 |
+|----------|----------|--------|
+| section  | 章节开始、主题切换 | 必须 |
+| two_col  | 对比（药物A vs B、手术 vs 保守） | 推荐 |
+| table    | 数据展示（指南推荐、分级标准） | 推荐 |
+| comparison | Before/After、方案对比 | 可选 |
+| quote    | 指南原文、专家观点引用 | 可选 |
+| center_focus | 核心结论、关键数据 | 可选 |
+```
+
+### 3. 内容拆分规则
+```
+❌ 一页超过 6 个要点 → 拆成两页或用 two_col
+❌ 纯文字描述数据 → 改用 table 布局
+❌ 对比内容用 content → 改用 two_col 或 comparison
+```
+
+### 4. 视觉节奏模板（15 页 PPT 示例）
+```
+1.  title — 标题页
+2.  section — 第一章：概述
+3.  content — 流行病学数据
+4.  table — 诊断标准表格
+5.  section — 第二章：发病机制
+6.  content — 病理生理
+7.  two_col — 病因 vs 危险因素
+8.  section — 第三章：临床表现
+9.  content — 主要症状
+10. comparison — 典型 vs 非典型表现
+11. section — 第四章：治疗
+12. two_col — 药物治疗 vs 非药物治疗
+13. table — 治疗方案汇总
+14. center_focus — 核心要点总结
+15. content — 参考文献
+```
+
+**注意**：避免连续 3 页以上使用相同布局！
+
+---
+
 **文件命名规则**：
 `/workspace/group/[topic_slug]_[type]_[date].pptx`
 例：`/workspace/group/copd_teaching_20260311.pptx`
 
 ---
 
-## 第五步：输出结果（⚠️ 必须使用MCP工具调用）
+## 第五步：输出结果（增强版）
 
-生成 PPT 后，**必须使用MCP工具**发送结果，不能直接输出文本！
+生成 PPT 后，立即调用 send_file 发送到用户：
 
-### ✅ 正确：使用 MCP 工具
+1. **确认文件存在**：检查 `/workspace/group/[filename].pptx` 是否存在
+2. **调用 send_file MCP 工具**：使用 `send_file({file_path: "/workspace/group/[filename].pptx", file_name: "[显示名].pptx"})`
+3. **发送确认消息**：
+```
+✅ PPT 已生成并发送！
 
-**第一步：发送文件**
-```python
-# 调用 send_file MCP 工具
-send_file({
-    "file_path": "/workspace/group/[filename].pptx",
-    "file_name": "[显示名].pptx"
-})
+📁 文件：[filename].pptx（[X] 页）
+📋 类型：[ppt_type]
+🎨 风格：[style]
+
+**大纲预览**：
+1. 标题页
+2. [章节1]
+3. [页面2]
+...
+
+💡 如需调整：
+- 修改页面内容、顺序
+- 更换配色风格（academic/clinical/patient/concise）
+- 增减页数
+- 添加讲稿备注
+
+直接告诉我，我马上重新生成。
 ```
 
-**第二步：发送卡片（飞书等支持的渠道）**
-```python
-# 调用 send_card MCP 工具
-send_card({
-    "header": {
-        "title": {"content": "✅ PPT 已生成！"}
-    },
-    "elements": [
-        {
-            "tag": "div",
-            "text": {
-                "tag": "lark_md",
-                "content": "**📁 文件**：[filename].pptx（[X] 页）\n**📋 类型**：[ppt_type]\n**🎨 风格**：[style]\n**⏱ 时长**：[minutes] 分钟"
-            }
-        },
-        {"tag": "hr"},
-        {
-            "tag": "div",
-            "text": {
-                "tag": "lark_md",
-                "content": "**内容概览**：\n| 章节 | 内容 |\n|------|------|\n| 一 | [章节1内容] |\n| 二 | [章节2内容] |"
-            }
-        },
-        {"tag": "hr"},
-        {
-            "tag": "div",
-            "text": {
-                "tag": "lark_md",
-                "content": "💡 **如需调整**：\n• 修改页面内容、顺序\n• 更换配色风格（academic/clinical/patient）\n• 增减页数\n• 添加讲稿备注"
-            }
-        }
-    ]
-})
-```
-
-### ❌ 错误：直接输出文本
-
-```python
-# ❌ 不要这样做！
-print("✅ PPT 已生成并发送！\n\n📁 文件：...")
-```
-
-**原因**：直接输出的文本会以纯消息形式发送，不会渲染为交互式卡片。
-
----
-
-### 飞书卡片格式说明
-
-飞书卡片必须使用以下结构：
-
-**header**（可选）
-```json
-{
-  "title": {"content": "标题"},
-  "subtitle": {"content": "副标题"}
-}
-```
-
-**elements**（必填，数组）
-- `div` + `lark_md`：Markdown格式文本块
-- `hr`：分割线
-- `img`：图片
-
-**示例**：
-```json
-{
-  "header": {"title": {"content": "标题"}},
-  "elements": [
-    {"tag": "div", "text": {"tag": "lark_md", "content": "**粗体** 文字"}},
-    {"tag": "hr"},
-    {"tag": "div", "text": {"tag": "lark_md", "content": "普通文字"}}
-  ]
-}
-```
-
-**注意**：
-- `lark_md` 支持 Markdown 语法：`**粗体**`、`*斜体*`、`` `代码` ``、`[链接](url)`
-- 表格语法：`| 列1 | 列2 |\n|------|------|\n| 值1 | 值2 |`
+**注意**：如果 send_file 调用失败（文件过大、网络问题等），告知用户文件路径以便手动取用。
 
 ---
 
