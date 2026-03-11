@@ -6,6 +6,7 @@ import { readEnvFile } from '../env.js';
 import { logger } from '../logger.js';
 import { registerChannel, ChannelOpts } from './registry.js';
 import {
+  CardContent,
   Channel,
   OnChatMetadata,
   OnInboundMessage,
@@ -216,6 +217,30 @@ export class FeishuChannel implements Channel {
     }
   }
 
+  async sendCard(jid: string, card: CardContent): Promise<void> {
+    try {
+      const isDirect = jid.startsWith('fs:user:');
+      const id = jid.replace(/^fs:(user|group):/, '');
+      const receiveIdType = isDirect ? 'open_id' : 'chat_id';
+
+      // Build Feishu interactive card format
+      const cardContent = buildFeishuCard(card);
+
+      await this.client.im.message.create({
+        params: { receive_id_type: receiveIdType },
+        data: {
+          receive_id: id,
+          msg_type: 'interactive',
+          content: JSON.stringify(cardContent),
+        },
+      });
+
+      logger.info({ jid }, 'Feishu card sent');
+    } catch (err) {
+      logger.error({ jid, err }, 'Feishu: failed to send card');
+    }
+  }
+
   isConnected(): boolean {
     return this._connected;
   }
@@ -228,6 +253,40 @@ export class FeishuChannel implements Channel {
     this._connected = false;
     logger.info('Feishu disconnected');
   }
+}
+
+/**
+ * Convert generic CardContent to Feishu interactive card format
+ * @see https://open.larksuite.com/document/home/interactive-cards-card
+ */
+function buildFeishuCard(card: CardContent): Record<string, unknown> {
+  const elements = card.elements || [];
+
+  // Build header if present
+  let header: Record<string, unknown> | undefined;
+  if (card.header?.title?.content) {
+    header = {
+      title: {
+        tag: 'plain_text',
+        content: card.header.title.content,
+      },
+      subtitle: card.header.subtitle
+        ? {
+            tag: 'plain_text',
+            content: card.header.subtitle.content,
+          }
+        : undefined,
+    };
+  }
+
+  // Build card config
+  return {
+    config: {
+      wide_screen_mode: true,
+    },
+    header,
+    elements,
+  };
 }
 
 registerChannel('feishu', (opts: ChannelOpts) => {
