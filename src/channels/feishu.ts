@@ -163,16 +163,30 @@ export class FeishuChannel implements Channel {
       const id = jid.replace(/^fs:(user|group):/, '');
       const receiveIdType = isDirect ? 'open_id' : 'chat_id';
 
+      // Use interactive card with lark_md for markdown rendering
       await this.client.im.message.create({
         params: { receive_id_type: receiveIdType },
         data: {
           receive_id: id,
-          msg_type: 'text',
-          content: JSON.stringify({ text }),
+          msg_type: 'interactive',
+          content: JSON.stringify({
+            config: {
+              wide_screen_mode: true,
+            },
+            elements: [
+              {
+                tag: 'div',
+                text: {
+                  tag: 'lark_md',
+                  content: text,
+                },
+              },
+            ],
+          }),
         },
       });
 
-      logger.info({ jid, length: text.length }, 'Feishu message sent');
+      logger.info({ jid, length: text.length }, 'Feishu message sent (card)');
     } catch (err) {
       logger.error({ jid, err }, 'Feishu: failed to send message');
     }
