@@ -3,7 +3,7 @@
 
 FROM node:22-slim
 
-# Install system dependencies for Chromium
+# Install system dependencies for Chromium and PDF/OCR processing
 RUN apt-get update && apt-get install -y \
     chromium \
     fonts-liberation \
@@ -25,6 +25,9 @@ RUN apt-get update && apt-get install -y \
     curl \
     git \
     python3.11-venv \
+    poppler-utils \
+    tesseract-ocr \
+    tesseract-ocr-chi-sim \
     && rm -rf /var/lib/apt/lists/*
 
 # Set Chromium path for agent-browser
@@ -49,6 +52,9 @@ COPY agent-runner/ ./
 # Build TypeScript
 RUN npm run build
 
+# Clone PubMed MCP server for literature search (requirements installed after venv creation)
+RUN git clone https://github.com/JackKuo666/PubMed-MCP-Server.git /app/mcp-servers/pubmed-mcp
+
 # Create workspace directories
 RUN mkdir -p /workspace/group /workspace/global /workspace/extra /workspace/ipc/messages /workspace/ipc/tasks /workspace/ipc/input
 
@@ -63,13 +69,24 @@ RUN chown -R node:node /workspace && chmod 777 /home/node
 # Switch to non-root user (required for --dangerously-skip-permissions)
 USER node
 
-# Install python-pptx for the node user
+# Install Python packages for the node user
+# Create venv, install python-pptx, pdfplumber, openpyxl, pytesseract
+# Also install PubMed MCP server requirements
 RUN mkdir -p /home/node/bin \
     && python3 -m venv /home/node/.venv \
     && . /home/node/.venv/bin/activate \
-    && pip install --no-cache-dir python-pptx \
+    && pip install --no-cache-dir \
+        python-pptx \
+        pdfplumber \
+        PyPDF2 \
+        openpyxl \
+        pytesseract \
+    && pip install --no-cache-dir -r /app/mcp-servers/pubmed-mcp/requirements.txt \
     && ln -sf /home/node/.venv/bin/python /home/node/bin/python \
     && ln -sf /home/node/.venv/bin/pip /home/node/bin/pip
+
+# Add /home/node/bin to PATH for all users
+ENV PATH="/home/node/bin:${PATH}"
 
 # Set working directory to group workspace
 WORKDIR /workspace/group
