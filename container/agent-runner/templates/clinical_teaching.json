@@ -1,0 +1,22 @@
+{
+  "name": "Clinical Teaching",
+  "description": "Clear clinical style for teaching and case discussions",
+  "palette": "clinical",
+  "fonts": {
+    "heading": "Arial",
+    "body": "Calibri"
+  },
+  "defaults": {
+    "background": "gradient",
+    "decorations": ["accent_bar"],
+    "slide_number": true
+  },
+  "layout_weights": {
+    "title": 1,
+    "section": 1,
+    "content": 5,
+    "two_col": 3,
+    "table": 2,
+    "image_left": 2
+  }
+}

@@ -80,6 +80,8 @@ RUN mkdir -p /home/node/bin \
         PyPDF2 \
         openpyxl \
         pytesseract \
+        matplotlib \
+        Pillow \
     && pip install --no-cache-dir -r /app/mcp-servers/pubmed-mcp/requirements.txt \
     && ln -sf /home/node/.venv/bin/pip /home/node/bin/pip \
     && ln -sf /home/node/.venv/bin/pip /home/node/bin/pip3

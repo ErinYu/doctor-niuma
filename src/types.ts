@@ -79,12 +79,31 @@ export interface TaskRunLog {
 
 // --- Channel abstraction ---
 
+// Card content for interactive cards (e.g., Feishu/Lark cards)
+export interface CardContent {
+  header?: {
+    title?: {
+      content: string;
+    };
+    subtitle?: {
+      content: string;
+    };
+  };
+  elements?: Array<{
+    tag: string;
+    [key: string]: unknown;
+  }>;
+  [key: string]: unknown;
+}
+
 export interface Channel {
   name: string;
   connect(): Promise<void>;
   sendMessage(jid: string, text: string): Promise<void>;
   // Optional: send a file to the user/group. Channels that support it implement it.
   sendFile?(jid: string, filePath: string, fileName: string): Promise<void>;
+  // Optional: send an interactive card to the user/group. Channels that support it implement it.
+  sendCard?(jid: string, card: CardContent): Promise<void>;
   isConnected(): boolean;
   ownsJid(jid: string): boolean;
   disconnect(): Promise<void>;

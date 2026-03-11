@@ -291,12 +291,72 @@ echo '{ ...JSON... }' | python3 /app/generate_ppt.py
 }
 ```
 
-**layout 类型**：
+**layout 类型**（现已扩展到 16 种）：
+
+**基础布局**：
+- `title` — 标题页（含装饰栏和底部装饰条）
 - `section` — 章节分隔页（深色背景，大字）
 - `content` — 标题+要点列表（最常用）
-- `two_col` — 两栏对比
-- `table` — 表格
 - `blank` — 空白（自定义）
+
+**多栏布局**：
+- `two_col` — 两栏对比（左/右分栏）
+- `three_col` — 三栏并列（用于对比展示）
+- `left_sidebar` — 内容+左侧边栏（用于注释/说明）
+- `right_sidebar` — 内容+右侧边栏（用于要点/统计）
+
+**图片布局**（新增）：
+- `image_left` — 图片左（40%）+ 文字右（60%）
+- `image_right` — 文字左（60%）+ 图片右（40%）
+- `image_top` — 图片上（50%）+ 文字下（50%）
+
+**特殊布局**（新增）：
+- `table` — 表格（增强样式：渐变表头、斑马纹、边框）
+- `chart` — 图表（支持柱状图、折线图、饼图、散点图、组合图）
+- `quote` — 引用页（大号引用+署名）
+- `center_focus` — 居中聚焦（带装饰边框）
+- `comparison` — 对比矩阵（Before/After、选项A/B）
+- `process` — 流程图（带编号步骤和箭头）
+
+**图片插入说明**（新增功能）：
+在 JSON 中指定图片路径和样式：
+```json
+{
+  "layout": "image_left",
+  "title": "图片标题",
+  "image": {
+    "path": "/workspace/group/diagram.png",
+    "style": "rounded"
+  },
+  "content": ["右侧文字说明"]
+}
+```
+支持样式：`plain`（默认）、`rounded`（圆角）、`shadow`（阴影）、`border`（边框）
+
+**图表生成说明**（新增功能）：
+在 JSON 中指定图表数据和类型：
+```json
+{
+  "layout": "chart",
+  "title": "数据趋势图",
+  "chart": {
+    "type": "bar",
+    "data": {
+      "categories": ["Q1", "Q2", "Q3", "Q4"],
+      "series": [
+        {"name": "收入", "values": [100, 120, 140, 160], "color": "primary"}
+      ]
+    }
+  }
+}
+```
+支持图表类型：`bar`（柱状图）、`line`（折线图）、`pie`（饼图）、`scatter`（散点图）、`combo`（组合图）
+
+**增强视觉效果**（新增）：
+- 所有布局现在包含装饰性元素（accent bars、角标等）
+- 渐变背景选项（在 palette 中定义）
+- 增强的表格样式（渐变表头、斑马纹、彩色边框）
+- 更丰富的字体配对（每种风格独立字体设置）
 
 **文件命名规则**：
 `/workspace/group/[topic_slug]_[type]_[date].pptx`
