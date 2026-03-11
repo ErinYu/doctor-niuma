@@ -1,8 +1,8 @@
 {
   "mcpServers": {
     "pubmed": {
-      "command": "python3",
-      "args": ["/app/mcp-servers/pubmed-mcp/src/pubmed_mcp/server.py"]
+      "command": "/home/node/bin/python3",
+      "args": ["/app/mcp-servers/pubmed-mcp/pubmed_server.py"]
     }
   }
 }
