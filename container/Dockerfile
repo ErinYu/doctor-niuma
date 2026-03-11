@@ -24,6 +24,7 @@ RUN apt-get update && apt-get install -y \
     libxshmfence1 \
     curl \
     git \
+    python3.11-venv \
     && rm -rf /var/lib/apt/lists/*
 
 # Set Chromium path for agent-browser
@@ -61,6 +62,13 @@ RUN chown -R node:node /workspace && chmod 777 /home/node
 
 # Switch to non-root user (required for --dangerously-skip-permissions)
 USER node
+
+# Install python-pptx for the node user
+RUN python3 -m venv /home/node/.venv \
+    && . /home/node/.venv/bin/activate \
+    && pip install --no-cache-dir python-pptx \
+    && ln -sf /home/node/.venv/bin/python /home/node/bin/python \
+    && ln -sf /home/node/.venv/bin/pip /home/node/bin/pip
 
 # Set working directory to group workspace
 WORKDIR /workspace/group

@@ -220,6 +220,10 @@ function readSecrets(): Record<string, string> {
     'ANTHROPIC_API_KEY',
     'ANTHROPIC_BASE_URL',
     'ANTHROPIC_AUTH_TOKEN',
+    'HTTP_PROXY',
+    'HTTPS_PROXY',
+    'ZENMUX_API_KEY',
+    'CLAUDE_CODE_DEFAULT_MODEL',
   ]);
 }
 

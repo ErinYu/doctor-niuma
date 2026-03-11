@@ -3,6 +3,12 @@
 
 // discord
 
+// dingtalk
+import './dingtalk.js';
+
+// feishu
+import './feishu.js';
+
 // gmail
 
 // slack
