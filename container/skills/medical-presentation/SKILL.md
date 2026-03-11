@@ -364,77 +364,99 @@ echo '{ ...JSON... }' | python3 /app/generate_ppt.py
 
 ---
 
-## 第五步：输出结果（增强版）
+## 第五步：输出结果（⚠️ 必须使用MCP工具调用）
 
-生成 PPT 后，**分两步发送**给用户：
+生成 PPT 后，**必须使用MCP工具**发送结果，不能直接输出文本！
 
-### 步骤 1：发送 PPT 文件
+### ✅ 正确：使用 MCP 工具
 
-使用 `send_file` MCP 工具：
-```
+**第一步：发送文件**
+```python
+# 调用 send_file MCP 工具
 send_file({
-  file_path: "/workspace/group/[filename].pptx",
-  file_name: "[显示名].pptx"
+    "file_path": "/workspace/group/[filename].pptx",
+    "file_name": "[显示名].pptx"
 })
 ```
 
-### 步骤 2：发送结果确认卡片
+**第二步：发送卡片（飞书等支持的渠道）**
+```python
+# 调用 send_card MCP 工具
+send_card({
+    "header": {
+        "title": {"content": "✅ PPT 已生成！"}
+    },
+    "elements": [
+        {
+            "tag": "div",
+            "text": {
+                "tag": "lark_md",
+                "content": "**📁 文件**：[filename].pptx（[X] 页）\n**📋 类型**：[ppt_type]\n**🎨 风格**：[style]\n**⏱ 时长**：[minutes] 分钟"
+            }
+        },
+        {"tag": "hr"},
+        {
+            "tag": "div",
+            "text": {
+                "tag": "lark_md",
+                "content": "**内容概览**：\n| 章节 | 内容 |\n|------|------|\n| 一 | [章节1内容] |\n| 二 | [章节2内容] |"
+            }
+        },
+        {"tag": "hr"},
+        {
+            "tag": "div",
+            "text": {
+                "tag": "lark_md",
+                "content": "💡 **如需调整**：\n• 修改页面内容、顺序\n• 更换配色风格（academic/clinical/patient）\n• 增减页数\n• 添加讲稿备注"
+            }
+        }
+    ]
+})
+```
 
-使用 `send_card` 发送飞书卡片（支持卡片的渠道）：
+### ❌ 错误：直接输出文本
 
+```python
+# ❌ 不要这样做！
+print("✅ PPT 已生成并发送！\n\n📁 文件：...")
+```
+
+**原因**：直接输出的文本会以纯消息形式发送，不会渲染为交互式卡片。
+
+---
+
+### 飞书卡片格式说明
+
+飞书卡片必须使用以下结构：
+
+**header**（可选）
 ```json
 {
-  "header": {
-    "title": { "content": "✅ PPT 已生成！" }
-  },
+  "title": {"content": "标题"},
+  "subtitle": {"content": "副标题"}
+}
+```
+
+**elements**（必填，数组）
+- `div` + `lark_md`：Markdown格式文本块
+- `hr`：分割线
+- `img`：图片
+
+**示例**：
+```json
+{
+  "header": {"title": {"content": "标题"}},
   "elements": [
-    {
-      "tag": "div",
-      "text": {
-        "tag": "lark_md",
-        "content": "**📁 文件**：[filename].pptx（[X] 页）\n**📋 类型**：[ppt_type]\n**🎨 风格**：[style]\n**⏱ 时长**：[minutes] 分钟"
-      }
-    },
-    {
-      "tag": "hr"
-    },
-    {
-      "tag": "div",
-      "text": {
-        "tag": "lark_md",
-        "content": "**内容概览**：\n| 章节 | 内容 |\n|------|------|\n| 一 | [章节1内容] |\n| 二 | [章节2内容] |"
-      }
-    },
-    {
-      "tag": "hr"
-    },
-    {
-      "tag": "div",
-      "text": {
-        "tag": "lark_md",
-        "content": "💡 **如需调整**：\n• 修改页面内容、顺序\n• 更换配色风格（academic/clinical/patient）\n• 增减页数\n• 添加讲稿备注"
-      }
-    }
+    {"tag": "div", "text": {"tag": "lark_md", "content": "**粗体** 文字"}},
+    {"tag": "hr"},
+    {"tag": "div", "text": {"tag": "lark_md", "content": "普通文字"}}
   ]
 }
 ```
 
-**降级方案**：如果渠道不支持卡片，使用 `send_message` 发送文本：
-```
-✅ PPT 已生成！
-
-📁 文件：[filename].pptx（[X] 页）
-📋 类型：[ppt_type]  |  🎨 风格：[style]
-
-**内容概览**：
-| 章节 | 内容 |
-|------|------|
-| 一 | [章节1] |
-
-💡 如需调整，直接告诉我！
-```
-
-**注意**：如果 send_file 失败，告知用户文件路径 `/workspace/group/[filename].pptx`
+**注意**：
+- `lark_md` 支持 Markdown 语法：`**粗体**`、`*斜体*`、`` `代码` ``、`[链接](url)`
+- 表格语法：`| 列1 | 列2 |\n|------|------|\n| 值1 | 值2 |`
 
 ---
 
