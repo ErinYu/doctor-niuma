@@ -97,10 +97,11 @@ def create_pie_chart(ax, chart_data: Dict, palette: Dict[str, RGBColor]):
     labels = chart_data["categories"]
 
     # Use palette colors or cycle through colors
+    all_series = chart_data["series"]
     colors = []
     for i, val in enumerate(values):
-        if i < len(series_list):
-            color_spec = series_list[i].get("color", "primary")
+        if i < len(all_series):
+            color_spec = all_series[i].get("color", "primary")
             colors.append(get_chart_color(color_spec, palette).rgb[:3])
         else:
             # Fallback colors

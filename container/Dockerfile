@@ -82,6 +82,8 @@ RUN mkdir -p /home/node/bin \
         pytesseract \
         matplotlib \
         Pillow \
+        google-genai \
+        pdf2image \
     && pip install --no-cache-dir -r /app/mcp-servers/pubmed-mcp/requirements.txt \
     && ln -sf /home/node/.venv/bin/pip /home/node/bin/pip \
     && ln -sf /home/node/.venv/bin/pip /home/node/bin/pip3

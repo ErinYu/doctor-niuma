@@ -200,10 +200,11 @@ function formatStatusMessage(
       : 0;
     const minutes = Math.floor(elapsed / 60);
     const seconds = elapsed % 60;
-    const timeStr =
-      minutes > 0 ? `${minutes}分${seconds}秒` : `${seconds}秒`;
+    const timeStr = minutes > 0 ? `${minutes}分${seconds}秒` : `${seconds}秒`;
 
-    lines.push(`🔄 状态: ${status.isIdle ? '空闲等待中' : '处理中'} (${timeStr})`);
+    lines.push(
+      `🔄 状态: ${status.isIdle ? '空闲等待中' : '处理中'} (${timeStr})`,
+    );
     if (status.retryCount > 0) {
       lines.push(`⚠️ 重试次数: ${status.retryCount}/5`);
     }
@@ -219,7 +220,9 @@ function formatStatusMessage(
     lines.push(`📋 队列中任务: ${status.pendingTasksCount}`);
   }
 
-  lines.push(`\n📈 全局: ${stats.activeCount}/${stats.maxConcurrent} 容器运行中`);
+  lines.push(
+    `\n📈 全局: ${stats.activeCount}/${stats.maxConcurrent} 容器运行中`,
+  );
 
   if (stats.waitingGroups > 0) {
     lines.push(`⏳ 等待中的群组: ${stats.waitingGroups}`);

@@ -118,6 +118,91 @@ function log(message: string): void {
   console.error(`[agent-runner] ${message}`);
 }
 
+// ── Casual chat fast path ────────────────────────────────────────────────────
+// For simple greetings and emotional/casual messages, skip the heavy Claude
+// Agent SDK and call a lighter, more conversational model (GPT-5.4) directly.
+
+const CASUAL_CHAT_MODEL = 'openai/gpt-5.4';
+
+/**
+ * Extract raw user text from the XML-formatted prompt.
+ * Format: <messages><message sender="..." time="...">content</message></messages>
+ */
+function extractUserText(prompt: string): string {
+  const matches = [...prompt.matchAll(/<message[^>]*>([\s\S]*?)<\/message>/g)];
+  if (matches.length === 0) return prompt;
+  // Use the last message (most recent)
+  return matches[matches.length - 1][1]
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .trim();
+}
+
+/**
+ * Check if the message is casual chat (greeting, emotional, small talk).
+ * Only triggers on short, simple messages without task-like content.
+ */
+function isCasualChat(text: string): boolean {
+  // Strip trigger prefix
+  const cleaned = text.replace(/^@\S+\s*/, '').trim();
+  // Too long = likely a real task
+  if (cleaned.length > 80) return false;
+  // Contains file/image markers = task
+  if (/\[(File|Image|Audio|Video):/.test(cleaned)) return false;
+
+  const casualPatterns = [
+    /^(你好|hello|hi|hey|嗨|哈喽|在吗|在不在|hey there|good morning|早上好|晚上好|下午好|早啊|晚安|good night)\s*[!！？?。.~]*$/i,
+    /^(谢谢|thanks|thank you|thx|感谢|辛苦了|多谢)\s*[!！。.~]*$/i,
+    /^(好的|ok|okay|嗯|嗯嗯|收到|了解|明白|get it|got it)\s*[!！。.~]*$/i,
+    /^(你是谁|who are you|你叫什么|自我介绍|介绍一下你自己)\s*[？?]*$/i,
+    /^(😀|😊|👋|🙏|❤️|😄|🎉|👍|😂|🤗|😘)+$/,
+    /^(haha|哈哈|呵呵|嘿嘿|lol|哈哈哈+)\s*[!！]*$/i,
+    /^(今天.*心情|好无聊|无聊|聊聊天|陪我聊|闲聊|说说话)/,
+    /^(你.{0,4}(开心|快乐|难过|伤心|累|忙))/,
+    /^(晚安|拜拜|bye|再见|see you|good bye)\s*[!！~]*$/i,
+  ];
+  return casualPatterns.some(p => p.test(cleaned));
+}
+
+/**
+ * Call GPT-5.4 via Zenmux Anthropic-compatible API for casual chat.
+ */
+async function callCasualModel(
+  userText: string,
+  secrets: Record<string, string>,
+  assistantName: string,
+): Promise<string> {
+  const apiKey = secrets.ZENMUX_API_KEY || secrets.ANTHROPIC_API_KEY;
+  const baseUrl = secrets.ANTHROPIC_BASE_URL || 'https://zenmux.ai/api/anthropic';
+
+  const body = JSON.stringify({
+    model: CASUAL_CHAT_MODEL,
+    max_tokens: 1024,
+    system: `你是${assistantName}，一个亲切、有温度的AI助手。回复要自然、温暖、有个性，像朋友聊天一样。不要过于正式或机械。保持简短，1-3句话即可。用中文回复。`,
+    messages: [{ role: 'user', content: userText }],
+  });
+
+  const response = await globalThis.fetch(`${baseUrl}/v1/messages`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'x-api-key': apiKey,
+      'anthropic-version': '2023-06-01',
+    },
+    body,
+  });
+
+  if (!response.ok) {
+    const errText = await response.text();
+    throw new Error(`Casual model API error ${response.status}: ${errText}`);
+  }
+
+  const data = await response.json() as { content?: Array<{ text?: string }> };
+  return data.content?.[0]?.text || '';
+}
+
 function getSessionSummary(sessionId: string, transcriptPath: string): string | null {
   const projectDir = path.dirname(transcriptPath);
   const indexPath = path.join(projectDir, 'sessions-index.json');
@@ -520,6 +605,21 @@ async function main(): Promise<void> {
     sdkEnv[key] = value;
   }
 
+  // Write ZENMUX_API_KEY to file so Python scripts (generate_ppt.py, gemini_image_gen.py)
+  // can access it even when run as Bash subprocesses
+  const zenmuxKey = containerInput.secrets?.ZENMUX_API_KEY;
+  log(`ZENMUX_API_KEY present: ${!!zenmuxKey}, length: ${zenmuxKey?.length || 0}`);
+  if (zenmuxKey) {
+    try {
+      fs.writeFileSync('/tmp/.zenmux_key', zenmuxKey, { mode: 0o600 });
+      log('Wrote ZENMUX_API_KEY to /tmp/.zenmux_key');
+    } catch (err) {
+      log(`Failed to write ZENMUX_API_KEY: ${err}`);
+    }
+  } else {
+    log('WARNING: ZENMUX_API_KEY not provided in secrets');
+  }
+
   const __dirname = path.dirname(fileURLToPath(import.meta.url));
   const mcpServerPath = path.join(__dirname, 'ipc-mcp-stdio.js');
 
@@ -538,6 +638,29 @@ async function main(): Promise<void> {
   if (pending.length > 0) {
     log(`Draining ${pending.length} pending IPC messages into initial prompt`);
     prompt += '\n' + pending.join('\n');
+  }
+
+  // ── Casual chat fast path ──────────────────────────────────────────────
+  // If this is a simple greeting/casual message, skip the heavy Agent SDK
+  // and respond directly via GPT-5.4 for a warmer, more natural reply.
+  if (!containerInput.isScheduledTask && !containerInput.sessionId) {
+    const userText = extractUserText(prompt);
+    if (isCasualChat(userText)) {
+      log(`Casual chat detected: "${userText.slice(0, 50)}", using ${CASUAL_CHAT_MODEL}`);
+      try {
+        const reply = await callCasualModel(
+          userText,
+          containerInput.secrets || {},
+          containerInput.assistantName || 'assistant',
+        );
+        log(`Casual reply: "${reply.slice(0, 200)}"`);
+        writeOutput({ status: 'success', result: reply });
+        process.exit(0);
+      } catch (err) {
+        log(`Casual model failed, falling through to Agent SDK: ${err instanceof Error ? err.message : String(err)}`);
+        // Fall through to normal agent flow
+      }
+    }
   }
 
   // Query loop: run query → wait for IPC message → run new query → repeat

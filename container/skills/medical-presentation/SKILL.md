@@ -24,16 +24,54 @@ allowed-tools: Bash,Read,Write,WebSearch,WebFetch
 | `duration` | 汇报时长（分钟） | 15 分钟 |
 | `slides_count` | 页数 | 按时长估算（约 1.5 页/分钟） |
 | `language` | 中文/英文/双语 | 中文 |
-| `style` | academic/clinical/patient/concise | 见下表 |
+| `style` | academic/clinical/patient/concise/bold_signal/dark_botanical/notebook/neon_cyber/swiss_modern/vintage/minimalist/editorial/neo_retro | 见下表 |
+| `show_preview` | 是否先展示风格预览 | 否（直接生成） |
 | `speaker_notes` | 是否要讲稿 | 是 |
 | `reference_constraints` | 指定参考文献/指南 | 无 |
 | `outline_preference` | 是否有指定结构 | 无 |
 
 **style 对照**：
-- `academic` → 开题/结题答辩、学术汇报
-- `clinical` → 教学培训、科室业务学习、病例讨论
-- `patient` → 患者教育
-- `concise` → 快速业务分享、简洁版本
+- `academic` → 开题/结题答辩、学术汇报（深蓝学术风）
+- `clinical` → 教学培训、科室业务学习、病例讨论（临床蓝色）
+- `patient` → 患者教育（温暖青色）
+- `concise` → 快速业务分享、简洁版本（灰蓝极简）
+- `bold_signal` → 科技感强的演示（暗底+电蓝+粉红）
+- `dark_botanical` → 优雅自然风（森林绿+鼠尾草）
+- `notebook` → 温馨笔记本风（米色+陶土橙）
+- `neon_cyber` → 赛博朋克风（深紫+霓虹绿）
+- `swiss_modern` → 瑞士现代设计（白底+红+黑）
+- `vintage` → 复古典雅风（奶油色+深绿+金色）
+- `minimalist` → NotebookLM极简风（浅灰底+黑字+黄点缀）
+- `editorial` → NotebookLM杂志风（白底+黄色主色块+红色强调）
+- `neo_retro` → NotebookLM复古科技风（奶油格子纸+粉/青/黄三色块）
+
+### 🎨 风格预览模式（推荐！）
+
+如果用户不确定想要哪种风格，可以先生成一个包含所有 13 种风格的预览 PPT：
+
+```bash
+# 通过 Bash 工具调用
+python3 /app/generate_ppt.py --preview --output /workspace/group/style_preview.pptx
+```
+
+**预览文件包含**：
+- 13 页，每页展示一种风格的样本
+- 每页包含：风格名称、描述、示例要点、风格专属装饰
+- 用户打开后可以直观对比选择
+
+**使用场景**：
+- 用户说"我不确定要哪种风格" → 生成预览发送
+- 用户说"给我看看有什么风格" → 生成预览发送
+- 用户说"帮我选个好看的风格" → 生成预览发送
+
+**生成预览后**，使用 send_file 发送并告诉用户：
+```
+我生成了一个风格预览文件，包含所有 13 种视觉风格。
+
+请打开预览，告诉我你最喜欢第几页的风格，我就用那个风格来制作你的 PPT！
+```
+
+---
 
 **追问规则（增强版）**：
 
@@ -128,7 +166,11 @@ allowed-tools: Bash,Read,Write,WebSearch,WebFetch
 ### 文件附件处理
 
 **PDF 文件**（指南、论文、出院小结）：
-- 使用 Bash 工具调用：`python3 /app/pdf_reader.py <path_to_pdf>`
+- **推荐**：使用 Vision 增强模式：`python3 /app/pdf_vision_reader.py <path_to_pdf>`
+  - 自动提取文字内容 + 表格
+  - 对含图片/图表的页面使用 Gemini Vision 分析
+  - 识别流程图、数据图表、医学影像示意图
+- **降级**：纯文字提取：`python3 /app/pdf_reader.py <path_to_pdf>`
 - 提取全文内容，重点关注：
   - 推荐/推荐等级、治疗路径、诊断标准
   - 流行病学数据、预后指标
@@ -139,10 +181,67 @@ allowed-tools: Bash,Read,Write,WebSearch,WebFetch
 - 提取：表头、数据行数、统计类型、关键列
 - 识别：P值、置信区间、统计方法
 
-**图片文件**（化验单、CT报告截图）：
-- 使用 Bash 工具调用：`tesseract <path_to_image> stdout -l chi_sim+eng`
-- ⚠️ **高风险**：OCR 可能出错，数字识别需人工核对
-- 适用于：化验单数值、CT报告文字
+**图片文件**（化验单、CT报告截图、医学影像）：
+- **推荐**：使用 Gemini Vision 分析：`python3 /app/gemini_image_gen.py analyze <path_to_image> "请详细描述这张医学图片的内容"`
+  - 支持：化验单、CT/MRI 报告、病理图片、手术照片
+  - 自动识别文字、数值、图表内容
+- **降级**：使用 OCR：`tesseract <path_to_image> stdout -l chi_sim+eng`
+  - ⚠️ OCR 可能出错，数字识别需人工核对
+
+### 🖼️ AI 配图生成（全自动！）
+
+**重要**：PPT 生成器现在会**自动为所有内容页生成配图**！你无需手动调用图片生成。
+
+系统会：
+1. 自动识别内容页（`content`、`two_col` 等布局）
+2. 根据页面标题和内容生成配图 prompt
+3. 调用 Gemini 3 Pro Image 生成专业医学插图
+4. 自动将布局切换为 `image_right` 以展示配图
+
+**你只需要**：
+- 专注于内容结构设计
+- 系统会自动处理配图
+
+**手动生成图片**（可选，用于特殊需求）：
+```bash
+python3 /app/gemini_image_gen.py generate '{"prompt": "描述...", "output_path": "/workspace/group/images/slide_3.png", "style": "medical"}'
+```
+
+**style 选项**：
+| style | 用途 |
+|-------|------|
+| `medical` | 解剖图、手术示意图、器官结构 |
+| `diagram` | 流程图、诊断路径、治疗方案 |
+| `infographic` | 数据可视化、统计图表 |
+| `comparison` | 对比图（A vs B、术前术后） |
+
+### 📊 表格使用规则
+
+**什么时候用表格**：
+- 诊断标准对比（不同分级的诊断依据）
+- 药物剂量汇总（不同药物、不同剂量、不同适应症）
+- 临床试验数据（多组对比的统计结果）
+- 指南推荐汇总（推荐等级、证据级别）
+
+**什么时候不用表格**：
+- 纯文字描述的内容
+- 流程/步骤（用 `process` 布局）
+- 简单的 2-3 项对比（用 `two_col` 或 `comparison`）
+
+**示例**：
+```json
+{
+  "layout": "table",
+  "title": "高血压分级标准",
+  "table": [
+    ["分级", "收缩压", "舒张压"],
+    ["正常", "<120", "<80"],
+    ["正常高值", "120-139", "80-89"],
+    ["1级高血压", "140-159", "90-99"],
+    ["2级高血压", "160-179", "100-109"]
+  ]
+}
+```
 
 ### 纯文字请求（降级方案）
 
@@ -291,7 +390,46 @@ echo '{ ...JSON... }' | python3 /app/generate_ppt.py
 }
 ```
 
-**layout 类型**（现已扩展到 16 种）：
+**layout 类型**（现已扩展到 20 种）：
+
+**基础布局**：
+- `title` — 标题页（含装饰栏和底部装饰条）
+- `section` — 章节分隔页（深色背景，大字）
+- `content` — 标题+要点列表（最常用）
+- `blank` — 空白（自定义）
+
+**多栏布局**：
+- `two_col` — 两栏对比（左/右分栏）
+- `three_col` — 三栏并列（用于对比展示）
+- `left_sidebar` — 内容+左侧边栏（用于注释/说明）
+- `right_sidebar` — 内容+右侧边栏（用于要点/统计）
+
+**图片布局**：
+- `image_left` — 图片左（40%）+ 文字右（60%）
+- `image_right` — 文字左（60%）+ 图片右（40%）
+- `image_top` — 图片上（50%）+ 文字下（50%)
+
+**特殊布局**：
+- `table` — 表格（增强样式：渐变表头、斑马纹、边框）
+- `chart` — 图表（支持柱状图、折线图、饼图、散点图、组合图）
+- `quote` — 引用页（大号引用+署名）
+- `center_focus` — 居中聚焦（带装饰边框）
+- `comparison` — 对比矩阵（Before/After、选项A/B）
+- `process` — 流程图（带编号步骤和箭头）
+
+**NotebookLM 风格布局**（强烈推荐用于打造"网红级"PPT）：
+- `big_number` — 大数字高亮（关键统计数据，如"95%"占30-50%页面）
+- `split_panel` — 非对称分栏（70/30 或 60/40，一侧视觉一侧文字）
+- `timeline` — 纵向时间轴（步骤左右交错排列，讲故事神器）
+- `card_grid` — 卡片网格（2-3张卡片并排，每张含图标+标题+描述）
+
+**NotebookLM 设计原则**（打造"网红级"PPT 的秘诀）：
+- **一页一概念**，每页不超过 40 个词
+- 标题字号是正文的 **10 倍**（如：96pt 标题 vs 14pt 正文）
+- 配色控制在 **2-3 色**，不要五颜六色
+- **无页码、无 footer、无 logo** —— 完全干净
+- **二选一法则**：要么大面积留白，要么信息密集，绝不两者平分
+- 章节编号 (01, 02, 03) 作为导航元素
 
 **基础布局**：
 - `title` — 标题页（含装饰栏和底部装饰条）
@@ -352,11 +490,23 @@ echo '{ ...JSON... }' | python3 /app/generate_ppt.py
 ```
 支持图表类型：`bar`（柱状图）、`line`（折线图）、`pie`（饼图）、`scatter`（散点图）、`combo`（组合图）
 
-**增强视觉效果**（新增）：
+**增强视觉效果**（2026-03 大升级）：
 - 所有布局现在包含装饰性元素（accent bars、角标等）
-- 渐变背景选项（在 palette 中定义）
+- **渐变背景**（深色主题自动启用，通过 XML 实现真正的渐变填充）
+- **半透明装饰形状**（圆、矩形叠加层，营造层次感和深度）
+- **风格专属签名装饰**：
+  - Bold Signal: 彩色卡片焦点 + 大号章节编号 + 发光圆点
+  - Dark Botanical: 抽象渐变圆 + 细竖线分隔
+  - Notebook: 纸质容器 + 彩色标签页
+  - Swiss Modern: 网格系统 + 红色强调线
+  - Neon Cyber: 深色底 + 发光边框 + 角落光晕
+  - Vintage: 双线边框 + 衬线字体优雅
+  - Minimalist: 极致留白 + 单一黄色强调线
+  - Editorial: 杂志风 + 黄色主色块
+  - Neo Retro: 奶油格子纸 + 粉/青/黄三色块
+- **内容密度控制**（自动截断超长内容，防止信息过载）
 - 增强的表格样式（渐变表头、斑马纹、彩色边框）
-- 更丰富的字体配对（每种风格独立字体设置）
+- 更丰富的字体配对（每种风格独立字体设置，标题/正文/代码三种）
 
 ---
 

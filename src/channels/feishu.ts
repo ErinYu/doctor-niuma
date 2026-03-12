@@ -3,6 +3,7 @@ import * as lark from '@larksuiteoapi/node-sdk';
 
 import { ASSISTANT_NAME } from '../config.js';
 import { readEnvFile } from '../env.js';
+import { resolveGroupFolderPath } from '../group-folder.js';
 import { logger } from '../logger.js';
 import { registerChannel, ChannelOpts } from './registry.js';
 import {
@@ -120,16 +121,32 @@ export class FeishuChannel implements Channel {
         content = '';
       }
     } else if (msg.message_type === 'image') {
-      content = '[Image]';
+      // Download image and provide path to agent
+      try {
+        const imageData = JSON.parse(msg.content) as { image_key?: string };
+        const imageKey = imageData.image_key;
+        if (imageKey) {
+          const imagePath = await this.downloadImage(msg.message_id, imageKey, chatJid);
+          if (imagePath) {
+            content = `[Image: ${imagePath}]`;
+          } else {
+            content = '[Image]';
+          }
+        } else {
+          content = '[Image]';
+        }
+      } catch {
+        content = '[Image]';
+      }
     } else if (msg.message_type === 'audio') {
       content = '[Audio]';
     } else if (msg.message_type === 'file') {
       // Download file and provide path to agent
       try {
-        const fileData = JSON.parse(msg.content) as { file_key?: string };
+        const fileData = JSON.parse(msg.content) as { file_key?: string; file_name?: string };
         const fileKey = fileData.file_key;
         if (fileKey) {
-          const filePath = await this.downloadFile(fileKey, chatJid);
+          const filePath = await this.downloadFile(msg.message_id, fileKey, chatJid, fileData.file_name);
           if (filePath) {
             content = `[File: ${filePath}]`;
           } else {
@@ -156,7 +173,7 @@ export class FeishuChannel implements Channel {
 
     const group = this.opts.registeredGroups()[chatJid];
     if (!group) {
-      logger.debug({ chatJid }, 'Feishu: message from unregistered chat');
+      logger.info({ chatJid }, 'Feishu: message from unregistered chat');
       return;
     }
 
@@ -199,7 +216,10 @@ export class FeishuChannel implements Channel {
         },
       });
 
-      logger.info({ jid, length: text.length }, 'Feishu message sent (markdown)');
+      logger.info(
+        { jid, length: text.length },
+        'Feishu message sent (markdown)',
+      );
     } catch (err) {
       logger.error({ jid, err }, 'Feishu: failed to send message');
     }
@@ -216,17 +236,33 @@ export class FeishuChannel implements Channel {
       const receiveIdType = isDirect ? 'open_id' : 'chat_id';
 
       // Step 1: Upload file to Feishu to get file_key
+      // Map extension to Feishu file_type
+      const ext = fileName.split('.').pop()?.toLowerCase() || '';
+      const fileTypeMap: Record<string, string> = {
+        pdf: 'pdf', doc: 'doc', docx: 'doc',
+        xls: 'xls', xlsx: 'xls',
+        ppt: 'ppt', pptx: 'ppt',
+        mp4: 'mp4', opus: 'opus',
+      };
+      const fileType = fileTypeMap[ext] || 'stream';
+
       const fileStream = fs.createReadStream(filePath);
       const uploadRes = await this.client.im.file.create({
         data: {
-          file_type: 'stream',
+          file_type: fileType,
           file_name: fileName,
           file: fileStream,
         },
       });
-      const fileKey = (uploadRes as { data?: { file_key?: string } }).data
-        ?.file_key;
-      if (!fileKey) throw new Error('Feishu file upload returned no file_key');
+      // SDK may return file_key at top level or nested under .data
+      const res = uploadRes as Record<string, unknown>;
+      const fileKey =
+        (res.data as { file_key?: string })?.file_key
+        || (res as { file_key?: string }).file_key;
+      if (!fileKey) {
+        logger.error({ uploadRes: JSON.stringify(uploadRes), fileName, fileType }, 'Feishu file upload returned no file_key');
+        throw new Error('Feishu file upload returned no file_key');
+      }
 
       // Step 2: Send file message
       await this.client.im.message.create({
@@ -244,41 +280,44 @@ export class FeishuChannel implements Channel {
     }
   }
 
-  async downloadFile(fileKey: string, chatJid: string): Promise<string | null> {
+  async downloadFile(
+    messageId: string,
+    fileKey: string,
+    chatJid: string,
+    fileName?: string,
+  ): Promise<string | null> {
     try {
-      // Get file info first
-      const fileInfo = await this.client.im.file.get({
-        path: { file_key: fileKey },
-      });
-
-      const fileName = (fileInfo as { data?: { file?: { name?: string } } }).data?.file?.name || `file_${Date.now()}`;
-
-      // Get group folder path
       const group = this.opts.registeredGroups()[chatJid];
       if (!group) {
         logger.warn({ chatJid }, 'Cannot download file: group not registered');
         return null;
       }
 
-      // Create uploads directory
-      const uploadsDir = `/workspace/group/${group.folder}/uploads`;
+      const safeName = fileName || `file_${Date.now()}`;
+
+      // Create uploads directory on host (maps to /workspace/group/ in container)
+      const groupDir = resolveGroupFolderPath(group.folder);
+      const uploadsDir = `${groupDir}/uploads`;
       fs.mkdirSync(uploadsDir, { recursive: true });
 
-      // Download file
-      const filePath = `${uploadsDir}/${fileName}`;
+      const filePath = `${uploadsDir}/${safeName}`;
+      const containerPath = `/workspace/group/${group.folder}/uploads/${safeName}`;
 
-      // Use Feishu API to download file content
+      // Use correct Feishu API: download message resource by message_id + file_key
       const response = await fetch(
-        `https://open.larksuite.com/open-apis/im/v1/files/${fileKey}/download`,
+        `https://open.feishu.cn/open-apis/im/v1/messages/${messageId}/resources/${fileKey}?type=file`,
         {
           headers: {
-            'Authorization': `Bearer ${await this.getTenantToken()}`,
+            Authorization: `Bearer ${await this.getTenantToken()}`,
           },
-        }
+        },
       );
 
       if (!response.ok) {
-        logger.warn({ fileKey, status: response.status }, 'Failed to download file from Feishu');
+        logger.warn(
+          { fileKey, messageId, status: response.status },
+          'Failed to download file from Feishu',
+        );
         return null;
       }
 
@@ -286,10 +325,57 @@ export class FeishuChannel implements Channel {
       const buffer = Buffer.from(arrayBuffer);
       fs.writeFileSync(filePath, buffer);
 
-      logger.info({ fileKey, filePath, fileName }, 'Feishu file downloaded');
-      return filePath;
+      logger.info({ fileKey, filePath, safeName }, 'Feishu file downloaded');
+      return containerPath;
     } catch (err) {
       logger.error({ fileKey, err }, 'Feishu: failed to download file');
+      return null;
+    }
+  }
+
+  async downloadImage(messageId: string, imageKey: string, chatJid: string): Promise<string | null> {
+    try {
+      const group = this.opts.registeredGroups()[chatJid];
+      if (!group) {
+        logger.warn({ chatJid }, 'Cannot download image: group not registered');
+        return null;
+      }
+
+      // Create uploads directory on host (maps to /workspace/group/ in container)
+      const groupDir = resolveGroupFolderPath(group.folder);
+      const uploadsDir = `${groupDir}/uploads`;
+      fs.mkdirSync(uploadsDir, { recursive: true });
+
+      const imageFileName = `image_${Date.now()}.png`;
+      const filePath = `${uploadsDir}/${imageFileName}`;
+      const containerPath = `/workspace/group/${group.folder}/uploads/${imageFileName}`;
+
+      // Use correct Feishu API: download message resource by message_id + image_key
+      const response = await fetch(
+        `https://open.feishu.cn/open-apis/im/v1/messages/${messageId}/resources/${imageKey}?type=image`,
+        {
+          headers: {
+            Authorization: `Bearer ${await this.getTenantToken()}`,
+          },
+        },
+      );
+
+      if (!response.ok) {
+        logger.warn(
+          { imageKey, messageId, status: response.status },
+          'Failed to download image from Feishu',
+        );
+        return null;
+      }
+
+      const arrayBuffer = await response.arrayBuffer();
+      const buffer = Buffer.from(arrayBuffer);
+      fs.writeFileSync(filePath, buffer);
+
+      logger.info({ imageKey, filePath }, 'Feishu image downloaded');
+      return containerPath;
+    } catch (err) {
+      logger.error({ imageKey, err }, 'Feishu: failed to download image');
       return null;
     }
   }
@@ -297,7 +383,7 @@ export class FeishuChannel implements Channel {
   private async getTenantToken(): Promise<string> {
     // Get tenant access token using app credentials
     const response = await fetch(
-      'https://open.larksuite.com/open-apis/auth/v3/tenant_access_token/internal',
+      'https://open.feishu.cn/open-apis/auth/v3/tenant_access_token/internal',
       {
         method: 'POST',
         headers: {
@@ -307,7 +393,7 @@ export class FeishuChannel implements Channel {
           app_id: this.opts.appId,
           app_secret: this.opts.appSecret,
         }),
-      }
+      },
     );
 
     const data = (await response.json()) as { tenant_access_token?: string };
